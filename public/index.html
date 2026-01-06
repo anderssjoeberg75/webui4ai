@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <wf-meta-tags>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>AI Chat</title>
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+        <style>
+            :root {
+                --bg-color: #1e1e1e;
+                --chat-bg: #2d2d2d;
+                --user-msg-bg: #0056b3;
+                --ai-msg-bg: #3d3d3d;
+                --text-color: #e0e0e0;
+                --input-bg: #404040;
+                --border-color: #555;
+            }
+
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: var(--bg-color);
+                color: var(--text-color);
+                margin: 0;
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+            }
+
+            /* --- Header --- */
+            header {
+                padding: 1rem;
+                background-color: var(--chat-bg);
+                border-bottom: 1px solid var(--border-color);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+            h1 { margin: 0; font-size: 1.2rem; }
+
+            select {
+                padding: 0.5rem;
+                background-color: var(--input-bg);
+                color: white;
+                border: 1px solid var(--border-color);
+                border-radius: 4px;
+            }
+
+            /* --- Chat Area --- */
+            #chat-container {
+                flex: 1;
+                overflow-y: auto;
+                padding: 1rem;
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .message {
+                max-width: 80%;
+                padding: 0.8rem 1rem;
+                border-radius: 8px;
+                line-height: 1.5;
+                position: relative;
+            }
+
+            .message.user {
+                align-self: flex-end;
+                background-color: var(--user-msg-bg);
+                color: white;
+            }
+
+            .message.assistant {
+                align-self: flex-start;
+                background-color: var(--ai-msg-bg);
+                color: var(--text-color);
+            }
+
+            /* Markdown styling adjustments */
+            .message pre {
+                background: #111;
+                padding: 0.5rem;
+                border-radius: 4px;
+                overflow-x: auto;
+            }
+            .message code {
+                font-family: 'Consolas', monospace;
+            }
+
+            /* --- Input Area --- */
+            #input-area {
+                padding: 1rem;
+                background-color: var(--chat-bg);
+                border-top: 1px solid var(--border-color);
+                display: flex;
+                gap: 0.5rem;
+            }
+
+            textarea {
+                flex: 1;
+                padding: 0.8rem;
+                border-radius: 4px;
+                border: 1px solid var(--border-color);
+                background-color: var(--input-bg);
+                color: white;
+                resize: none;
+                height: 50px;
+                font-family: inherit;
+            }
+
+            textarea:focus { outline: 2px solid var(--user-msg-bg); }
+
+            button {
+                padding: 0 1.5rem;
+                background-color: var(--user-msg-bg);
+                color: white;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: bold;
+                transition: background 0.2s;
+            }
+
+            button:hover { background-color: #004494; }
+            button:disabled { background-color: #555; cursor: not-allowed; }
+
+        </style>
+    </wf-meta-tags>
+</head>
+<body>
+
+    <header>
+        <h1 id="header-title">AI Assistant</h1>
+        <select id="model-select">
+            <option value="" disabled selected>Loading models...</option>
+        </select>
+    </header>
+
+    <div id="chat-container">
+        <div class="message assistant">
+            Hello! How can I help you today?
+        </div>
+    </div>
+
+    <div id="input-area">
+        <textarea id="user-input" placeholder="Type a message..."></textarea>
+        <button id="send-btn">Send</button>
+    </div>
+
+    <script>
+        // --- State Management ---
+        let chatHistory = []; 
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const modelSelect = document.getElementById('model-select');
+        const headerTitle = document.getElementById('header-title');
+
+        // --- Initialization ---
+        async function init() {
+            await loadConfig(); // Fetch name first
+            await loadModels();
+            userInput.focus();
+        }
+
+        // --- Fetch Configuration (Name) ---
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const data = await res.json();
+                if (data.name) {
+                    headerTitle.textContent = data.name;
+                    document.title = data.name;
+                }
+            } catch (error) {
+                console.error("Error loading config:", error);
+            }
+        }
+
+        // --- Fetch Models ---
+        async function loadModels() {
+            try {
+                const res = await fetch('/api/models');
+                const data = await res.json();
+                
+                modelSelect.innerHTML = ''; // Clear loading text
+
+                if (data.models && data.models.length > 0) {
+                    data.models.forEach((model, index) => {
+                        const option = document.createElement('option');
+                        option.value = model.name;
+                        option.textContent = model.name;
+                        modelSelect.appendChild(option);
+                    });
+                } else {
+                    const option = document.createElement('option');
+                    option.text = "No models found";
+                    modelSelect.appendChild(option);
+                }
+            } catch (error) {
+                console.error("Error loading models:", error);
+                modelSelect.innerHTML = '<option>Error loading models</option>';
+            }
+        }
+
+        // --- UI Functions ---
+        function appendMessagehv(role, text) {
+            const div = document.createElement('div');
+            div.classList.add('message', role);
+            
+            // Use 'marked' library to parse Markdown if it's the assistant
+            if (role === 'assistant') {
+                div.innerHTML = marked.parse(text);
+            } else {
+                div.textContent = text;
+            }
+
+            chatContainer.appendChild(div);
+            scrollToBottom();
+            return div; // Return reference to update later if needed
+        }
+
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // --- Chat Logic ---
+        async function sendMessage() {
+            const text = userInput.value.trim();
+            const model = modelSelect.value;
+
+            if (!text) return;
+            if (!model) {
+                alert("Please select a model first.");
+                return;
+            }
+
+            // 1. Add User Message to UI and History
+            appendMessagehv('user', text);
+            userInput.value = '';
+            chatHistory.push({ role: 'user', content: text });
+
+            // 2. Prepare Assistant UI Placeholder
+            const assistantMsgDiv = document.createElement('div');
+            assistantMsgDiv.classList.add('message', 'assistant');
+            assistantMsgDiv.textContent = "..."; // Loading state
+            chatContainer.appendChild(assistantMsgDiv);
+            scrollToBottom();
+
+            let fullResponse = "";
+
+            try {
+                // 3. Send Request
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: chatHistory
+                    })
+                });
+
+                if (!response.ok) throw new Error("Network response was not ok");
+
+                // 4. Handle Streaming Response
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                // Clear loading dots
+                assistantMsgDiv.innerHTML = ""; 
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    
+                    // We need to parse multiple JSON objects that might come in one chunk
+                    // or split across chunks. For simplicity in this demo, we assume 
+                    // the server sends newline-delimited JSON or clean objects.
+                    
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const json = JSON.parse(line);
+                            if (json.message && json.message.content) {
+                                const content = json.message.content;
+                                fullResponse += content;
+                                // Live update with Markdown
+                                assistantMsgDiv.innerHTML = marked.parse(fullResponse);
+                                scrollToBottom();
+                            }
+                        } catch (e) {
+                            console.warn("Error parsing chunk:", e);
+                        }
+                    }
+                }
+
+                // 5. Add to history when done
+                chatHistory.push({ role: 'assistant', content: fullResponse });
+
+            } catch (error) {
+                console.error("Chat error:", error);
+                assistantMsgDiv.textContent = "Error: Could not reach the server.";
+            }
+        }
+
+        // --- Event Listeners ---
+        sendBtn.addEventListener('click', sendMessage);
+        
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Run start up
+        init();
+
+    </script>
+</body>
+</html>

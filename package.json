@@ -1,0 +1,15 @@
+{
+  "name": "ollama-webapp",
+  "version": "2.0.1",
+  "description": "Streaming web UI for Ollama with auth and model management",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "body-parser": "^2.2.1",
+    "cors": "^2.8.5",
+    "express": "^4.22.1"
+  }
+}
